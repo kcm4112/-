@@ -1,19 +1,71 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 
-//'=' 아스키코드는 61 변경 하나둘
+void getParameter(int argc, char* argv[]);
+void getRequest();
+
+typedef	struct Request {
+	char* address;
+	char rw;
+	char* data;
+}Request;
+
+typedef	struct Cache {
+	char* tag;
+	int** data;
+	bool dirty;
+	bool valid;
+}Cache;
+
+typedef	struct Memory {
+	int adress;
+	int data;
+}Memory;
+
+//구조체 선언
+//reqeust
+//cache
+//memory
+//set 구조체???
+
+Memory* memoryList;
+Cache* cacheList;
+Request* RequestList;
 int cache_size = 0;
 int set_size = 0;
 int block_size = 0;
-int s = 0;
-int a = 0;
-int b = 0;
-char* f;
+char* fileName;
+
 int main(int argc, char* argv[]) {
 
+	getParameter(argc, argv);
 
+	FILE* fp = 0;
+	
+	fp = fopen(fileName, "r");
+	if (fp == NULL)
+	{
+		printf("can't open");
+		fflush(stdout);
+		exit(-1);
+	}
+	
+	
+
+	getRequest()
+
+	//init request -> mm memory 동적할당
+
+	//
+
+
+	return 0;
+}
+
+void getParameter(int argc, char* argv[]) {
 	for (int i = 1; i < argc; i++) {
 		//"-s"일 때 cache size 가져오는 부분
 		if (strncmp("-s", argv[i], 2) == 0) {
@@ -38,8 +90,6 @@ int main(int argc, char* argv[]) {
 			}
 			printf("set size는 %d 입니다.\n", set_size);
 		}
-
-
 		//"-b"일 때 block size 가져오는 부분
 		if (strncmp("-b", argv[i], 2) == 0) {
 			for (int j = 0; j < strlen(argv[i]); j++) {
@@ -53,15 +103,20 @@ int main(int argc, char* argv[]) {
 		}
 		if (strncmp("-f", argv[i], 2) == 0) {
 			int t_length = strlen(argv[i]);
-			char* context=NULL;
+			char* context = NULL;
 			char* ptr = strtok_s(argv[i], "=", &context);      // " " 공백 문자를 기준으로 문자열을 자름, 포인터 반환
-			f = strtok_s(NULL, "=", &context);
-		
-		
-			printf("%s", f);
+			fileName = strtok_s(NULL, "=", &context);
+			printf("%s", fileName);
 		}
-
-
 	}
-	return 0;
+}
+
+void setRequestList() {
+
+
+}
+
+void getRequest() {
+
+
 }
