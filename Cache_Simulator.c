@@ -3,7 +3,7 @@
 #include <stdlib.h>
 
 
-//'=' 아스키코드는 61
+//'=' 아스키코드는 61 변경 하나둘
 int cache_size=0;
 int set_size =0;
 int block_size =0;
