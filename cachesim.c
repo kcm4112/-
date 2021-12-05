@@ -7,7 +7,12 @@
 int cache_size=0;
 int set_size =0;
 int block_size =0;
+int s = 0;
+int a = 0;
+int b = 0;
+char* f;
 int main(int argc, char *argv[])	{
+
 	
 	for(int i=1;i<argc;i++){
 		//"-s"일 때 cache size 가져오는 부분
@@ -45,6 +50,13 @@ int main(int argc, char *argv[])	{
 				}
 			}
 			printf("block size는 %d B입니다.\n", block_size);
+		}
+		if (strncmp("-f", argv[i], 2) == 0) {
+			int t_length = strlen(argv[i]);
+			
+			char* ptr = strtok(argv[i], "=");      // " " 공백 문자를 기준으로 문자열을 자름, 포인터 반환
+			f = strtok(NULL, "=");
+			printf("%s", f);
 		}
 		
 		
