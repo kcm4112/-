@@ -1,5 +1,5 @@
 #define _CRT_SECURE_NO_WARNINGS 
-#define MEMORYSIZE 1000
+#define MEMORYSIZE 3000
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -101,7 +101,6 @@ int main(int argc, char* argv[]) {
 				b->dirty = 1;
 				b->tag = tag;
 				b->valid = 1;
-				//우선순위
 			}
 			else{
 				b->dirty = 0;
@@ -109,7 +108,6 @@ int main(int argc, char* argv[]) {
 			cache->set_pp[index]->rank_num++;
 		}
 		//insert to cache
-		printCache();
 	}
 	printCache();
 	printAnalytics();
@@ -248,8 +246,6 @@ bool isHit(Request request) {
 	
 	byte_offset = request->address & (block_size-1);
 	index = (request->address >> offset_size) & (index_count-1);
-	printf("index: %d\n", index);
-	printf("offset: %d\n", byte_offset >> 2);
 	
 	tag = request->address - index - byte_offset;
 
@@ -258,16 +254,9 @@ bool isHit(Request request) {
 		if (b->valid == 1 && b->tag == tag) {
 			hit_count += 1;
 			block_offset = i;
-			printf("block: %d\n", i);
-			printf("%08X ", request->address);
-			printf("%c ", request->rw);
-			printf("%lld HIT!!!!!!!\n", request->data);
 			return true;
 		}
 	}
-	printf("%08X ", request->address);
-	printf("%c ", request->rw);
-	printf("%lld NOT HIT@@@@\n", request->data);
 	miss_count += 1;
 	return false;
 }
@@ -287,7 +276,6 @@ void findBlock() {
 		Block b = cache->set_pp[index]->block_pp[i];
 		if (b->valid == 0) {
 			block_offset = i;
-			printf("block: %d\n", i);
 			return;
 		}
 		if (min > b->rank) {
@@ -296,8 +284,6 @@ void findBlock() {
 		}
 	}
 	block_offset = min_index;
-	printf("block: %d\n", block_offset);
-	printf("min find: %d\n", min);
 }                            
 
 void dataToCache(Request request) {
@@ -356,6 +342,7 @@ void dataToCache(Request request) {
 
 void printCache(){
 	for (int i = 0; i < index_count; i++) {
+		
 		printf("%d: ", i);
 		for (int j = 0; j < set_size; j++) {
 			int offset_size = log2(block_size);
@@ -376,17 +363,16 @@ void printCache(){
 				d = 1;
 			}
 			else d = 0;
-			printf("v:%d d:%d rank: %d", v, d, b->rank);
-			
+			printf("v:%d d:%d", v, d);
 			printf("\n");
 		}
 	}
-	printf("===================================\n\n");
+	printf("\n");
 }
 void printAnalytics() {
 	printf("total number of hits: %.f\n", hit_count);
 	printf("total number of misses: %.f\n", miss_count);
 	printf("miss rate: %.1f%%\n", miss_count / (hit_count+miss_count) * 100);
 	printf("total number of dirty blocks: %d\n", dirty_count);
-	printf("average memory access cycle: %.1f\n", (hit_count + miss_count * 201) / (hit_count + miss_count));
+	printf("average memory access cycle: %.1f", (hit_count + miss_count * 201) / (hit_count + miss_count));
 }
