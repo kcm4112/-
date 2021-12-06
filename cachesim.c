@@ -1,5 +1,5 @@
 #define _CRT_SECURE_NO_WARNINGS 
-#define MEMORYSIZE 5000
+#define MEMORYSIZE 1000
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -38,7 +38,7 @@ typedef CacheStruct* Cache;
 
 typedef	struct Memory {
 	int adress;
-	int data;
+	int* data;
 }MemoryStruct;
 typedef MemoryStruct* Memory;
 
@@ -77,10 +77,15 @@ int main(int argc, char* argv[]) {
 		if (isHit(requestList[i])) {
 			Block b = cache->set_pp[index]->block_pp[block_offset];
 			if (isWrite(requestList[i]->rw)) {
-				b->rank = cache->set_pp[index]->rank_num++;
+				b->rank = cache->set_pp[index]->rank_num;
+				cache->set_pp[index]->rank_num++;
 				b->dataList[byte_offset>>2] = requestList[i]->data;
 				b->dirty = 1;
 				//우선순위
+			}
+			else {
+				b->rank = cache->set_pp[index]->rank_num;
+				cache->set_pp[index]->rank_num++;
 			}
 		}
 		else {
@@ -91,7 +96,7 @@ int main(int argc, char* argv[]) {
 			
 			Block b = cache->set_pp[index]->block_pp[block_offset];
 			if (isWrite(requestList[i]->rw)) {
-				b->rank = cache->set_pp[index]->rank_num++;
+				b->rank = cache->set_pp[index]->rank_num;
 				b->dataList[byte_offset >> 2] = requestList[i]->data;
 				b->dirty = 1;
 				b->tag = tag;
@@ -101,6 +106,7 @@ int main(int argc, char* argv[]) {
 			else{
 				b->dirty = 0;
 			}
+			cache->set_pp[index]->rank_num++;
 		}
 		//insert to cache
 		printCache();
@@ -181,13 +187,16 @@ void setRequestList() {
 		fflush(stdout);
 		exit(-1);
 	}
-	while (!feof(trace)) {
+	for(int i =0; i<requestListCount; i++){
 		fgets(temp, 101, trace);
 		if (strcmp(temp, "\n") == 0) {
 			break;
 		}
 
-		temp[strlen(temp) - 1] = '\0';
+		if (temp[strlen(temp) - 1] == '\n'){
+			temp[strlen(temp) - 1] = '\0';
+		}
+		
 		char* ptr = strtok(temp, " ");
 		requestList[++top] = malloc(sizeof(RequestStruct));
 		requestList[top]->address = strtoll(ptr, NULL, 16);
@@ -215,9 +224,8 @@ void init() {
 			for (int k = 0; k < block_size / 4; k++) {
 				cache->set_pp[i]->block_pp[j]->dataList[k] = 0;
 			}
-			cache->set_pp[i]->rank_num;
 			cache->set_pp[i]->block_pp[j]->dirty = 0;
-			cache->set_pp[i]->block_pp[j]->rank = 0;
+			cache->set_pp[i]->block_pp[j]->rank = INT_MAX;
 			cache->set_pp[i]->block_pp[j]->tag = 0;
 			cache->set_pp[i]->block_pp[j]->valid = 0;
 		}
@@ -227,15 +235,22 @@ void init() {
 	for (int i = 0; i < MEMORYSIZE; i++) {
 		memoryList[i] = malloc(sizeof(MemoryStruct));
 		memoryList[i]->adress = 0;
-		memoryList[i]->data = 0;
+		memoryList[i]->data = malloc(sizeof(int) * (block_size) / 4);
+		for (int j = 0; j < block_size / 4; j++) {
+			memoryList[i]->data[j] = 0;
+		}
 	}
 
 }
 
 bool isHit(Request request) {
-	int offset_size = log(block_size);
+	int offset_size = log2(block_size);
+	
 	byte_offset = request->address & (block_size-1);
 	index = (request->address >> offset_size) & (index_count-1);
+	printf("index: %d\n", index);
+	printf("offset: %d\n", byte_offset >> 2);
+	
 	tag = request->address - index - byte_offset;
 
 	for (int i = 0; i < set_size; i++) {
@@ -243,6 +258,7 @@ bool isHit(Request request) {
 		if (b->valid == 1 && b->tag == tag) {
 			hit_count += 1;
 			block_offset = i;
+			printf("block: %d\n", i);
 			printf("%08X ", request->address);
 			printf("%c ", request->rw);
 			printf("%lld HIT!!!!!!!\n", request->data);
@@ -271,6 +287,7 @@ void findBlock() {
 		Block b = cache->set_pp[index]->block_pp[i];
 		if (b->valid == 0) {
 			block_offset = i;
+			printf("block: %d\n", i);
 			return;
 		}
 		if (min > b->rank) {
@@ -279,11 +296,14 @@ void findBlock() {
 		}
 	}
 	block_offset = min_index;
-}
+	printf("block: %d\n", block_offset);
+	printf("min find: %d\n", min);
+}                            
 
 void dataToCache(Request request) {
 	Block b = cache->set_pp[index]->block_pp[block_offset];
-	int offset_size = log(block_size);
+	int rank_num = cache->set_pp[index]->rank_num;
+	int offset_size = log2(block_size);
 	int memory_num = -1;
 	int cache_address = b->tag + index << offset_size + byte_offset;
 	
@@ -304,29 +324,41 @@ void dataToCache(Request request) {
 				}
 			}
 		}
-		memoryList[memory_num]->data = b->dataList[byte_offset];
+		for (int i = 0; i < block_size / 4; i++) {
+			memoryList[memory_num]->data[i] = b->dataList[i];
+		}
 	}
 	int sw = 0;
 	//read 일때 memory-> cache
 	for (int i = 0; i < MEMORYSIZE; i++) {
 		if (memoryList[i]->adress == request->address) {
-			b->dataList[byte_offset] = memoryList[i]->data;
+			memory_num = i;
 			sw = 1;
 			break;
 		}
 	}
 	if (sw == 0) {
-		b->dataList[byte_offset] = 0;
+		for (int i = 0; i < MEMORYSIZE; i++) {
+			if (memoryList[i]->adress == 0) {
+				memoryList[i]->adress = request->address;
+				memory_num = i;
+				break;
+			}
+		}
+	}
+	for (int i = 0; i < block_size / 4; i++) {
+		b->dataList[i] = memoryList[memory_num]->data[i];
 	}
 	b->tag = tag;
 	b->valid = 1;
+	b->rank = rank_num;
 }
 
 void printCache(){
 	for (int i = 0; i < index_count; i++) {
 		printf("%d: ", i);
 		for (int j = 0; j < set_size; j++) {
-			int offset_size = log(block_size);
+			int offset_size = log2(block_size);
 			Block b = cache->set_pp[i]->block_pp[j];
 			if (j != 0) {
 				printf("   ");
@@ -344,7 +376,8 @@ void printCache(){
 				d = 1;
 			}
 			else d = 0;
-			printf("v:%d d:%d", v, d);
+			printf("v:%d d:%d rank: %d", v, d, b->rank);
+			
 			printf("\n");
 		}
 	}
@@ -353,7 +386,7 @@ void printCache(){
 void printAnalytics() {
 	printf("total number of hits: %.f\n", hit_count);
 	printf("total number of misses: %.f\n", miss_count);
-	printf("miss rate: %.1f\%\n", miss_count / hit_count * 100);
+	printf("miss rate: %.1f%%\n", miss_count / (hit_count+miss_count) * 100);
 	printf("total number of dirty blocks: %d\n", dirty_count);
-	printf("average memory access cycle: %.1f\n", (hit_count + miss_count * 200) / (hit_count + miss_count));
+	printf("average memory access cycle: %.1f\n", (hit_count + miss_count * 201) / (hit_count + miss_count));
 }
