@@ -1,13 +1,10 @@
 #define _CRT_SECURE_NO_WARNINGS 
-#define MEMORYSIZE 3000
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <math.h>
 #include <limits.h>  
-
-
 
 typedef	struct Request {
 	long long address;
@@ -39,6 +36,7 @@ typedef CacheStruct* Cache;
 typedef	struct Memory {
 	int adress;
 	int* data;
+	struct Memory* next;
 }MemoryStruct;
 typedef MemoryStruct* Memory;
 
@@ -51,7 +49,11 @@ void findBlock();
 void dataToCache(Request request);
 void printCache();
 void printAnalytics();
+Memory findMemory(long long addr);
+void makeMemory(long long addr);
 Memory* memoryList;
+Memory memoryHead = NULL;
+
 Cache cache;
 Request* requestList;
 int cache_size = 0;
@@ -67,7 +69,7 @@ int index_count;
 double hit_count = 0;
 double miss_count = 0;
 int dirty_count = 0;
-
+int print_count = 0;
 int main(int argc, char* argv[]) {
 
 	getParameter(argc, argv);
@@ -108,6 +110,7 @@ int main(int argc, char* argv[]) {
 			cache->set_pp[index]->rank_num++;
 		}
 		//insert to cache
+
 	}
 	printCache();
 	printAnalytics();
@@ -165,12 +168,11 @@ void setRequestList() {
 		fflush(stdout);
 		exit(-1);
 	}
-
-	while (!feof(trace)) {
-		fgets(temp, 101, trace);
+	while (fgets(temp, 101, trace)) {
 		if (strcmp(temp, "\n") == 0) {
 			break;
 		}
+		
 		requestListCount++;
 	}
 	fclose(trace);
@@ -229,16 +231,6 @@ void init() {
 		}
 	}
 
-	memoryList = malloc(sizeof(Memory) * 1000);
-	for (int i = 0; i < MEMORYSIZE; i++) {
-		memoryList[i] = malloc(sizeof(MemoryStruct));
-		memoryList[i]->adress = 0;
-		memoryList[i]->data = malloc(sizeof(int) * (block_size) / 4);
-		for (int j = 0; j < block_size / 4; j++) {
-			memoryList[i]->data[j] = 0;
-		}
-	}
-
 }
 
 bool isHit(Request request) {
@@ -291,54 +283,70 @@ void dataToCache(Request request) {
 	int rank_num = cache->set_pp[index]->rank_num;
 	int offset_size = log2(block_size);
 	int memory_num = -1;
-	int cache_address = b->tag + index << offset_size + byte_offset;
-	
+	int cache_address = b->tag + index << offset_size;
+	Memory mem = NULL;
 	if (b->dirty == 1) {
-		for (int i = 0; i < MEMORYSIZE; i++) {
-			if (memoryList[i]->adress == cache_address) {
-				memory_num = i;
-				break;
-			}
-		}
+		mem=findMemory(cache_address);
 		//메모리 인덱스 찾기
-		if (memory_num == -1) {
-			for (int i = 0; i < MEMORYSIZE; i++) {
-				if (memoryList[i]->adress == 0) {
-					memoryList[i]->adress = cache_address;
-					memory_num = i;
-					break;
-				}
+		if (mem == NULL) {
+			makeMemory(cache_address);
+			for (int i = 0; i < block_size / 4; i++) {
+				memoryHead->data[i] = b->dataList[i];
 			}
 		}
-		for (int i = 0; i < block_size / 4; i++) {
-			memoryList[memory_num]->data[i] = b->dataList[i];
+		else {
+			for (int i = 0; i < block_size / 4; i++) {
+				mem->data[i] = b->dataList[i];
+			}
 		}
 	}
-	int sw = 0;
+
 	//read 일때 memory-> cache
-	for (int i = 0; i < MEMORYSIZE; i++) {
-		if (memoryList[i]->adress == request->address) {
-			memory_num = i;
-			sw = 1;
-			break;
+	long long standardAddr = request->address & (-1 - (block_size - 1));
+	mem = findMemory(standardAddr);
+	if (mem == NULL) {
+		makeMemory(standardAddr);
+		for (int i = 0; i < block_size / 4; i++) {
+			 b->dataList[i] = memoryHead->data[i];
 		}
 	}
-	if (sw == 0) {
-		for (int i = 0; i < MEMORYSIZE; i++) {
-			if (memoryList[i]->adress == 0) {
-				memoryList[i]->adress = request->address;
-				memory_num = i;
-				break;
-			}
+	else {
+		for (int i = 0; i < block_size / 4; i++) {
+			 b->dataList[i]= mem->data[i];
 		}
-	}
-	for (int i = 0; i < block_size / 4; i++) {
-		b->dataList[i] = memoryList[memory_num]->data[i];
 	}
 	b->tag = tag;
 	b->valid = 1;
 	b->rank = rank_num;
 }
+
+void makeMemory(long long addr) {
+	Memory temp = (Memory)malloc(sizeof(MemoryStruct));
+	temp->adress = addr;
+	temp->data = malloc(sizeof(int) * (block_size) / 4);
+	if (temp == NULL) {
+		printf("메모리 생성오류\n");
+		return;
+	}
+	for (int j = 0; j < block_size / 4; j++) {
+		temp->data[j] = 0;
+	}
+	temp->next = memoryHead;
+	memoryHead = temp;
+}
+
+Memory findMemory(long long addr) {
+	Memory temp = memoryHead;
+	
+	while (temp != NULL) {
+		if (temp->adress == addr) {
+			return temp;
+		}
+		temp = temp->next;
+	}
+	return NULL;
+}
+
 
 void printCache(){
 	for (int i = 0; i < index_count; i++) {
