@@ -51,6 +51,7 @@ void printCache();
 void printAnalytics();
 Memory findMemory(long long addr);
 void makeMemory(long long addr);
+int makeLog2(int t);
 Memory* memoryList;
 Memory memoryHead = NULL;
 
@@ -59,12 +60,12 @@ Request* requestList;
 int cache_size = 0;
 int set_size = 0;
 int block_size = 0;
-char* fileName;
+char fileName[100] = {'\0'};
 int requestListCount = 0;
 int byte_offset = 0;
 int block_offset = 0;
 int tag;
-int index;
+int idx;
 int index_count;
 double hit_count = 0;
 double miss_count = 0;
@@ -77,17 +78,17 @@ int main(int argc, char* argv[]) {
 	init();
 	for (int i = 0; i < requestListCount; i++) {
 		if (isHit(requestList[i])) {
-			Block b = cache->set_pp[index]->block_pp[block_offset];
+			Block b = cache->set_pp[idx]->block_pp[block_offset];
 			if (isWrite(requestList[i]->rw)) {
-				b->rank = cache->set_pp[index]->rank_num;
-				cache->set_pp[index]->rank_num++;
+				b->rank = cache->set_pp[idx]->rank_num;
+				cache->set_pp[idx]->rank_num++;
 				b->dataList[byte_offset>>2] = requestList[i]->data;
 				b->dirty = 1;
 				//우선순위
 			}
 			else {
-				b->rank = cache->set_pp[index]->rank_num;
-				cache->set_pp[index]->rank_num++;
+				b->rank = cache->set_pp[idx]->rank_num;
+				cache->set_pp[idx]->rank_num++;
 			}
 		}
 		else {
@@ -96,9 +97,9 @@ int main(int argc, char* argv[]) {
 			findBlock();
 			dataToCache(requestList[i]);
 			
-			Block b = cache->set_pp[index]->block_pp[block_offset];
+			Block b = cache->set_pp[idx]->block_pp[block_offset];
 			if (isWrite(requestList[i]->rw)) {
-				b->rank = cache->set_pp[index]->rank_num;
+				b->rank = cache->set_pp[idx]->rank_num;
 				b->dataList[byte_offset >> 2] = requestList[i]->data;
 				b->dirty = 1;
 				b->tag = tag;
@@ -107,7 +108,7 @@ int main(int argc, char* argv[]) {
 			else{
 				b->dirty = 0;
 			}
-			cache->set_pp[index]->rank_num++;
+			cache->set_pp[idx]->rank_num++;
 		}
 		//insert to cache
 
@@ -151,9 +152,14 @@ void getParameter(int argc, char* argv[]) {
 			}
 		}
 		if (strncmp("-f", argv[i], 2) == 0) {
-			int t_length = strlen(argv[i]);
-			char* ptr = strtok(argv[i], "=");      // " " 공백 문자를 기준으로 문자열을 자름, 포인터 반환
-			fileName = strtok(NULL, "=");
+			for (int j = 0; j < strlen(argv[i]); j++) {
+				if (argv[i][j] == 61) {
+					for (int k = j + 1; k < strlen(argv[i]); k++) {
+						fileName[k-j-1] = argv[i][k];
+					}
+				}
+			}
+			fileName[strlen(argv[i]) - 1] = '\0';
 		}
 	}
 }
@@ -234,15 +240,15 @@ void init() {
 }
 
 bool isHit(Request request) {
-	int offset_size = log2(block_size);
+	int offset_size = makeLog2(block_size);
 	
 	byte_offset = request->address & (block_size-1);
-	index = (request->address >> offset_size) & (index_count-1);
+	idx = (request->address >> offset_size) & (index_count-1);
 	
-	tag = request->address - index - byte_offset;
+	tag = request->address - idx - byte_offset;
 
 	for (int i = 0; i < set_size; i++) {
-		Block b = cache->set_pp[index]->block_pp[i];
+		Block b = cache->set_pp[idx]->block_pp[i];
 		if (b->valid == 1 && b->tag == tag) {
 			hit_count += 1;
 			block_offset = i;
@@ -260,12 +266,12 @@ bool isWrite(char c) {
 }
 
 void findBlock() {
-	Set s = cache->set_pp[index];
+	Set s = cache->set_pp[idx];
 	int min = INT_MAX;
 	int min_index = -1;
 	//빈칸 찾기
 	for (int i = 0; i < set_size; i++) {
-		Block b = cache->set_pp[index]->block_pp[i];
+		Block b = s->block_pp[i];
 		if (b->valid == 0) {
 			block_offset = i;
 			return;
@@ -279,11 +285,10 @@ void findBlock() {
 }                            
 
 void dataToCache(Request request) {
-	Block b = cache->set_pp[index]->block_pp[block_offset];
-	int rank_num = cache->set_pp[index]->rank_num;
-	int offset_size = log2(block_size);
-	int memory_num = -1;
-	int cache_address = b->tag + index << offset_size;
+	Block b = cache->set_pp[idx]->block_pp[block_offset];
+	int rank_num = cache->set_pp[idx]->rank_num;
+	int offset_size = makeLog2(block_size);
+	int cache_address = (b->tag) + (idx << offset_size);
 	Memory mem = NULL;
 	if (b->dirty == 1) {
 		mem=findMemory(cache_address);
@@ -353,14 +358,13 @@ void printCache(){
 		
 		printf("%d: ", i);
 		for (int j = 0; j < set_size; j++) {
-			int offset_size = log2(block_size);
 			Block b = cache->set_pp[i]->block_pp[j];
 			if (j != 0) {
 				printf("   ");
 			}
 
 			for (int k = 0; k < block_size / 4; k++) {
-				printf("%08X ", cache->set_pp[i]->block_pp[j]->dataList[k]);
+				printf("%08llX ", cache->set_pp[i]->block_pp[j]->dataList[k]);
 			}
 			int v;
 			int d;
@@ -383,4 +387,12 @@ void printAnalytics() {
 	printf("miss rate: %.1f%%\n", miss_count / (hit_count+miss_count) * 100);
 	printf("total number of dirty blocks: %d\n", dirty_count);
 	printf("average memory access cycle: %.1f", (hit_count + miss_count * 201) / (hit_count + miss_count));
+}
+int makeLog2(int t) {
+	int count = 0;
+	while (t > 1) {
+		t = t >> 1;
+		count += 1;
+	}
+	return count;
 }
